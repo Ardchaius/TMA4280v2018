@@ -3,6 +3,7 @@
 #include <vector>
 #include <mpi.h>
 #include <iomanip>
+#include <eigen3>
 
 using namespace std;
 
@@ -30,7 +31,6 @@ int main(int argc, char** argv) {
     vector<double> localPositions(n+1,0);
     vector<vector<int> > localTopology(n,vector<int>(2,0));
 
-    double numberingStep = (n+1)/size;
     double meshStep = 1./n;
 
     int EPP = n/size; // Elements per processor
@@ -49,10 +49,65 @@ int main(int argc, char** argv) {
 
     }
 
-    for(int i = 0; i < n; i++)
-        cout << i+1 << ": " << localTopology[i][0] << " " << localTopology[i][1] << endl;
+//    vector<vector<double> > assemA(2,vector<double>(2,0));
+    double assemA[2][2] = {};
+    assemA[0][0] = 1./3.;
+    assemA[0][1] = 1./6.;
+    assemA[1][0] = 1./6.;
+    assemA[1][1] = 1./3.;
+
+//    vector<vector<double> > assemM(2,vector<double>(2,0));
+    double assemM[2][2] = {};
+    assemM[0][0] = 1.;
+    assemM[0][1] = -1.;
+    assemM[1][0] = -1.;
+    assemM[1][1] = 1.;
+
+//    vector<vector<double> > A(n+1, vector<double>(n+1,0));
+//    vector<vector<double> > M(n+1, vector<double>(n+1,0));
+    double A[n+1][n+1] = {};
+    double M[n+1][n+1] = {};
+
+    double globalA[n+1][n+1];
+    double globalM[n+1][n+1];
+
+    double jacobian;
 
 
+    for(int i = rank*EPP; i < (rank+1)*EPP; i++){
+
+        jacobian = abs(localPositions[localTopology[i][1]-1] - localPositions[localTopology[i][0]-1]);
+
+        A[localTopology[i][0]-1][localTopology[i][0]-1] += jacobian * assemA[0][0];
+        A[localTopology[i][0]-1][localTopology[i][1]-1] += jacobian * assemA[0][1];
+        A[localTopology[i][1]-1][localTopology[i][0]-1] += jacobian * assemA[1][0];
+        A[localTopology[i][1]-1][localTopology[i][1]-1] += jacobian * assemA[1][1];
+
+        M[localTopology[i][0]-1][localTopology[i][0]-1] += jacobian * assemM[0][0];
+        M[localTopology[i][0]-1][localTopology[i][1]-1] += jacobian * assemM[0][1];
+        M[localTopology[i][1]-1][localTopology[i][0]-1] += jacobian * assemM[1][0];
+        M[localTopology[i][1]-1][localTopology[i][1]-1] += jacobian * assemM[1][1];
+
+    }
+
+    MPI_Reduce(&A, &globalA, (n+1)*(n+1), MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&M, &globalM, (n+1)*(n+1), MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (rank == 0){
+
+        for(int i = 0; i <= n; i++){
+
+            for(int j = 0; j<= n; j++){
+
+                cout << globalM[i][j] << " ";
+
+            }
+
+            cout << endl;
+
+        }
+
+    }
 
     MPI_Finalize();
 
